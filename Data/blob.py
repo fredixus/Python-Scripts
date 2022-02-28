@@ -25,3 +25,7 @@ def listBlobsInContainer(conteiner):
     blob_list = blob_service.list_blobs(conteiner)
     for blob in blob_list:
         print("\t" + blob.name)
+
+def getTheBlobFile(filename, conteiner):
+    blob_service = _createBlockBlobService()
+    return blob_service.get_blob_to_path(conteiner, filename, filename)
