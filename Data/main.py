@@ -1,7 +1,7 @@
 #%% Imports
 import pandas as pd
 import dataimport as di
-import blob as blob
+from blob import BlobObject
 
 #%% BODY
 if __name__ == '__main__':
@@ -10,8 +10,14 @@ if __name__ == '__main__':
     print(df)
 
     df = pd.DataFrame({'grades': [0,1,10,12,100,120,200,250]})
-    blob.saveDataFrameAsCsv("test.csv", 'test', df)
 
-    blob.listBlobsInContainer('test')
+    blob = BlobObject("blobContainerName")
+    blob.turnOnNotify()
+    blob.connectToBlobService()
+
+    print(blob.listBlobsInContainer())
+
+    blob.putDataFrameToBlob(df, blob_file_name="test.csv", index=False, sep=",")
+
 
 

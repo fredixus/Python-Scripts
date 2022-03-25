@@ -60,6 +60,28 @@ def getKeyValutEnviromentSqlServer(database = 'DataBase Name'):
     
     return server, database, username, password
 
+def getKeyValutSecret(secret = 'secretName'):
+    """
+    Gets the secret, from KeyValut.
+    :param secret: {str} :: Secret name.
+    :return:
+        str secret
+    """
+
+    #Azure Key Vault adress
+    kv_url = "https://__________.vault.azure.net/"
+    
+    #Login
+    credential = AzureCliCredential()
+
+    #Create client
+    client = SecretClient(vault_url=kv_url, credential=credential)
+
+    #Get secrets
+    secret = client.get_secret(secret).value
+    
+    return secret
+
 def connectSql(driver, server, dbname, userID, passID):
     """
     Connect to Database engine.

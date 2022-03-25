@@ -1,0 +1,12 @@
+Use of file ProjectReview
+
+1. As normal excel
+
+2. By python script
+Use cmd python main.py {code: dpn/rmp __/e __/a /0}
+Python editor of current project
+ - Display project names: 	dpn
+ - Remove project: 		rmp 	{ProjectName}
+ - Edit project parameters: 	e 	{ProjectName}
+ - Add project: 		a
+ - Exit: 			0
