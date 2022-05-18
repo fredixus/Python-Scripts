@@ -10,6 +10,7 @@ def transformToObject(date):
     return dt.strptime(date, "%Y%M%d")
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
+    #df = pd.read_csv(io.BytesIO(inputblob.read()), sep=',', dtype=str)
     logging.info('Python HTTP trigger function processed a request.')
     #Transoform data formats
     try:
