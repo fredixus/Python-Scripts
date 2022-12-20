@@ -3,139 +3,117 @@ import pyodbc
 import urllib
 import os
 from sqlalchemy import create_engine
+import json
 
-from azure.keyvault.secrets import SecretClient
-from azure.identity import AzureCliCredential
+class database:
 
-def getLocalEnviromentSqlServer():
-    """
-    Gets the parameters, from local machine to connect to Database engine.
+    def __init__(self, driver = "ODBC Driver 17 for SQL Server"):
+        server = None
+        name = None
+        user = None
+        password = None
+        self.driver = driver
+        connection = None
 
-    :param server: {str} :: Server name with SQL:
-    :param dbname: {str} :: Database name in {server},
-    :param userID: {str} :: User name in {server} with access to {dbname},
-    :param passID: {str} :: Password for {User} in {server} with access to {dbname}
+    def set_variables_local_enviroment(self):
+        """
+        Sets the parameters, from local machine to connect to Database engine.
 
-    :return:
-        set of strings (server, dbname, userID, passID)
-    """
-    server = os.environ["SERVER"]
-    dbname = os.environ["DBNAME"]
-    userID = os.environ["USERID"]
-    passID = os.environ["PASSID"]
+        :param server: {str} :: Server name with SQL:
+        :param dbname: {str} :: Database name in {server},
+        :param userID: {str} :: User name in {server} with access to {dbname},
+        :param passID: {str} :: Password for {User} in {server} with access to {dbname}
 
-    return server, dbname, userID, passID
+        :return:
+            set of strings (server, dbname, userID, passID)
+        """
+        self.server = os.environ["SERVER"]
+        self.name = os.environ["DBNAME"]
+        self.user = os.environ["USERID"]
+        self.password = os.environ["PASSID"]
 
-def getKeyValutEnviromentSqlServer(database = 'DataBase Name'):
-    """
-    Gets the parameters, from local machine to connect to Database engine.
+    def secretsFromKeyVault(self, kv_url = "https://name.vault.azure.net/", server = "SERVER", name = "DBNAME", user = "USERID", password = "PASSID"):
+        from azure.keyvault.secrets import SecretClient
+        from azure.identity import AzureCliCredential
 
-    :param server: {str} :: Server name with SQL:
-    :param dbname: {str} :: Database name in {server},
-    :param userID: {str} :: User name in {server} with access to {dbname},
-    :param passID: {str} :: Password for {User} in {server} with access to {dbname}
+        credential = AzureCliCredential()
+        client = SecretClient(vault_url = kv_url, credential = credential)
+        self.server = client.get_secret(server).value 
+        self.name = client.get_secret(name).value
+        self.user = client.get_secret(user).value
+        self.password = client.get_secret(password).value
 
-    :return:
-        set of strings (server, dbname, userID, passID)
-    """
+    def set_variables_json(self, path_file_name="pass.json"):
+        """
+        Sets the parameters, from local machine to connect to Database engine.
 
-    #Names of secrets
-    server = 'dbserver'
-    username = 'dbuser'
-    passwd = "dbpass"
+        :param server: {str} :: Server name with SQL:
+        :param dbname: {str} :: Database name in {server},
+        :param userID: {str} :: User name in {server} with access to {dbname},
+        :param passID: {str} :: Password for {User} in {server} with access to {dbname}
 
-    #Azure Key Vault adress
-    kv_url = "https://__________.vault.azure.net/"
+        :return:
+            set of strings (server, dbname, userID, passID)
+        """
+        fileToOpen = open(path_file_name)
+        secretsFile = json.load(fileToOpen)
+        self.server = secretsFile["SERVER"]
+        self.name = secretsFile["DBNAME"]
+        self.user = secretsFile["USERID"]
+        self.password = secretsFile["PASSID"]
     
-    #Login
-    credential = AzureCliCredential()
+    def create_conection(self):
+        driver, server, dbname, userID, passID = self.get_configuration()
+        connectionstring = 'mssql+pyodbc://{uid}:{password}@{server}:1433/{database}?driver={driver}'.format(
+            uid = userID,
+            password = passID,
+            server = server,
+            database = dbname,
+            driver = driver.replace(' ', '+'))
 
-    #Create client
-    client = SecretClient(vault_url=kv_url, credential=credential)
-
-    #Get secrets
-    password = client.get_secret(passwd).value
-    username = client.get_secret(username).value
-    server = client.get_secret(server).value
+        self.conection = create_engine(connectionstring)
     
-    return server, database, username, password
+    def data_get_sql_as_df(self, sql) -> pd.DataFrame:
+        """
+        Connect to Database engine, and execute SQL command.
+        :param sql: SQL formula to execute on Database f.ex. 'Select * From TableName'
+        :param driver: SQL Driver f.ex.: SQL Server Native Client 11.0
+        :return:
+        df :: {pandas.DataFrame} :: Object with SQL data
+        """
+        return pd.read_sql(sql, self.conection)
 
-def getKeyValutSecret(secret = 'secretName'):
-    """
-    Gets the secret, from KeyValut.
-    :param secret: {str} :: Secret name.
-    :return:
-        str secret
-    """
+    def close_connection(self):
+        self.conection.close()
 
-    #Azure Key Vault adress
-    kv_url = "https://__________.vault.azure.net/"
+    def exec(self, sql):
+        self.conection.execute(sql)
+
+    def get_configuration(self):
+        return self.driver, self.server, self.name, self.user, self.password
     
-    #Login
-    credential = AzureCliCredential()
+    def data_save_dataframe(self, df, tableName = ""):
+        """
+        Save data from a dataframe into Database
+        
+        """
+        df.to_sql(tableName, self.conection, if_exists = 'append', index = False)
 
-    #Create client
-    client = SecretClient(vault_url=kv_url, credential=credential)
+    def data_save_dataframes_list(self, data_dict):
+        """
+        Save data from a dataframes into Database. Dataframes need to be pass as a list, of dictionaries like:
+        [{
+            "dataframe":df,
+            "tablename":"tablename"
+        },
+        ...
+        {
+            "dataframe":df_n,
+            "tablename":"tablename_n"
+        }]
+        """
+        with self.conection.begin() as conn:
+            for df in data_dict:
+                print("Saving to", df["tablename"], "with rows:", len(df["dataframe"]))
+                df["dataframe"].to_sql(df["tablename"], con=conn, if_exists = 'append', index = False)
 
-    #Get secrets
-    secret = client.get_secret(secret).value
-    
-    return secret
-
-def connectSql(driver, server, dbname, userID, passID):
-    """
-    Connect to Database engine.
-
-    :param driver: SQL Driver f.ex.: SQL Server Native Client 11.0
-    :param server: SQL Server name
-    :param dbname: Database name in {server}
-    :param userID: User name in {server} with access to {dbname}
-    :param passID: Password for {User} in {server} with access to {dbname}
-
-    :return:
-    conection :: {pyodbc.connect} :: Connection object
-    """
-    conection = pyodbc.connect(
-        "Driver={"  + driver +"};"
-        "Server="   + server +";"
-        "Database=" + dbname +";"
-        "uid="      + userID +";"
-        "pwd="      + passID +";"
-    )
-    return conection
-
-def getSqlAsDf(sql, driver = "SQL Server Native Client 11.0"):
-    """
-    Connect to Database engine, and execute SQL command.
-
-    :param sql: SQL formula to execute on Database f.ex. 'Select * From TableName'
-    :param driver: SQL Driver f.ex.: SQL Server Native Client 11.0
-
-    :return:
-    df :: {pandas.DataFrame} :: Object with SQL data
-    """
-    server, dbname, userID, passID = getLocalEnviromentSqlServer()
-    conection = pyodbc.connect(
-        "Driver={"  + driver + "};"
-        "Server="   + server + ";"
-        "Database=" + dbname + ";"
-        "uid="      + userID + ";"
-        "pwd="      + passID + ";"
-    )
-    df = pd.read_sql(sql, conection)
-    conection.close()
-    return df
-
-def putData(df, database = 'DataBase Name', tableName=""):
-    """Save data into Database"""
-    server, dbname, uid, pwd = getKeyValutEnviromentSqlServer(database)
-    driver = "ODBC Driver 17 for SQL Server"
-    connectionstring = 'mssql+pyodbc://{uid}:{password}@{server}:1433/{database}?driver={driver}'.format(
-        uid=uid,
-        password=pwd,
-        server=server,
-        database=dbname,
-        driver=driver.replace(' ', '+'))
-
-    engn = create_engine(connectionstring)
-    df.to_sql(tableName, engn, if_exists='append', index=False) 
